@@ -11,8 +11,8 @@ Module containing Determinant objects and associated operations.
 
     αlist -> Return the alpha string of a Determinant as a list
     βlist -> Return the beta string of a Determinant as a list
-    αindex -> Return the indexes of the occupied alpha electrons in a Determinant
-    βindex -> Return the indexes of the occupied beta electrons in a Determinant
+    αindex! -> Return the indexes of the occupied alpha electrons in a Determinant
+    βindex! -> Return the indexes of the occupied beta electrons in a Determinant
     αexcitation_level -> Compare two determinants to return the excitation level of the alpha electrons
     βexcitation_level -> Compare two determinants to return the excitation level of the beta electrons
     excitation_level ->  Compare two determinants to return the excitation level
@@ -36,8 +36,8 @@ module DetOperations
 export Determinant
 export αlist
 export βlist
-export αindex   
-export βindex  
+export αindex!
+export βindex! 
 export αexcitation_level
 export βexcitation_level
 export excitation_level
@@ -111,18 +111,19 @@ function βlist(D::Determinant)
 end
 
 """
-    JuES.ConfigurationInteraction.DetOperations.αindex(D::Determinant)
+    JuES.ConfigurationInteraction.DetOperations.αindex!(D::Determinant)
 
     Return the indexes of the occupied alpha electrons in a Determinant
 
 ## Arguments
 
     D::Determinant -> Determinant which the indexes are to be extracted
-    N::Int -> Number of electron indexes to be returned
-"""
-function αindex(D::Determinant, N::Int)
+    N::Int -> Number of alpha electrons
+    A::Array{Int64,1} -> Array where output is saved. Length must match N
 
-    out = Array{Int64,1}(undef,N)
+"""
+function αindex!(D::Determinant, N::Int, A::Array{Int64,1})
+
     i = 1
     e = 1
 
@@ -130,29 +131,27 @@ function αindex(D::Determinant, N::Int)
     # the number of electrons you will get stuck!
     while e ≤ N
         if 1<<(i-1) & D.α ≠ 0
-            out[e] = i
+            A[e] = i
             e += 1
         end
         i += 1
     end
 
-    return out
-
 end
 
 """
-    JuES.ConfigurationInteraction.DetOperations.βindex(D::Determinant)
+    JuES.ConfigurationInteraction.DetOperations.βindex!(D::Determinant)
 
     Return the indexes of the occupied beta electrons in a Determinant
 
 ## Arguments
 
     D::Determinant -> Determinant which the indexes are to be extracted
-    N::Int -> Number of electron indexes to be returned
+    N::Int -> Number of beta electrons
+    A::Array{Int64,1} -> Array where output is saved. Length must match N
 """
-function βindex(D::Determinant, N::Int)
+function βindex!(D::Determinant, N::Int, A::Array{Int64,1})
 
-    out = Array{Int64,1}(undef,N)
     i = 1
     e = 1
 
@@ -160,13 +159,11 @@ function βindex(D::Determinant, N::Int)
     # the number of electrons you will get stuck!
     while e ≤ N
         if 1<<(i-1) & D.β ≠ 0
-            out[e] = i
+            A[e] = i
             e += 1
         end
         i += 1
     end
-
-    return out
 
 end
 

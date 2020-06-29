@@ -150,29 +150,35 @@ function get_sparse_hamiltonian_matrix(dets::Array{Determinant,1}, h::Array{Floa
     Nα = sum(αlist(dets[1]))
     Nβ = sum(αlist(dets[1]))
 
+    ref_exc = map(x->excitation_level(dets[1], x), dets)
+
     αind = Array{Int64,1}(undef,Nα)
     βind = Array{Int64,1}(undef,Nβ)
     vals = Float64[]
     ivals = Int64[]
     jvals = Int64[]
-    elem = 0.0
     tHd0 = 0
     tHd1 = 0
     tHd2 = 0
-    t = 0
 
-    for i in 1:Ndets
-        D1 = dets[i]
-        αind .= αindex(D1, Nα)
-        βind .= βindex(D1, Nβ)
+    for i in eachindex(dets)
+        @inbounds D1 = dets[i]
+        αindex!(D1, Nα, αind)
+        βindex!(D1, Nβ, βind)
         for j in i:Ndets
-            D2 = dets[j]
+
+            @inbounds if ref_exc[j] > ref_exc[i] + 2
+                break
+            end
+
+            @inbounds D2 = dets[j]
             αexc = αexcitation_level(D1,D2)
             βexc = βexcitation_level(D1,D2)
             el = αexc + βexc
             if el > 2
                 nothing
             elseif el == 2
+                #elem = Hd2(D1, D2, V, αexc)
                 t = @elapsed elem = Hd2(D1, D2, V, αexc)
                 if elem > tol || -elem > tol
                     push!(vals, elem)
@@ -181,6 +187,7 @@ function get_sparse_hamiltonian_matrix(dets::Array{Determinant,1}, h::Array{Floa
                 end
                 tHd2 += t
             elseif el == 1
+                #elem = Hd1(αind, βind, D1, D2, h, V, αexc)
                 t = @elapsed elem = Hd1(αind, βind, D1, D2, h, V, αexc)
                 if elem > tol || -elem > tol
                     push!(vals, elem)
@@ -189,13 +196,14 @@ function get_sparse_hamiltonian_matrix(dets::Array{Determinant,1}, h::Array{Floa
                 end
                 tHd1 += t
             else
+                #elem = Hd0(αind, βind, h, V)
                 t = @elapsed elem = Hd0(αind, βind, h, V)
                 if elem > tol || -elem > tol
                     push!(vals, elem)
                     push!(ivals, i)
                     push!(jvals, j)
                 end
-                tHd0 += t
+                tHd2 += t
             end
         end
     end
