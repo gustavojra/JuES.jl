@@ -76,6 +76,251 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
     println("Active Vir: $actvir\n")
 
 
+    # Build T3, T4 and T4aa
+    T3 = zeros(ndocc, ndocc, ndocc, nvir, nvir, nvir)
+    T4 = zeros(ndocc, ndocc, ndocc, ndocc, nvir, nvir, nvir, nvir)
+    T4aa = zeros(ndocc, ndocc, ndocc, ndocc, nvir, nvir, nvir, nvir)
+
+    for id in eachindex(dets)
+       
+        @inbounds D = dets[id]
+        αexc = αexcitation_level(ref, D)
+        βexc = βexcitation_level(ref, D)
+
+        if αexc == 2 && βexc == 1
+            
+            # i > k, a > c
+            k,i = αexclusive(ref, D)
+            j,  = βexclusive(ref, D)
+            c,a = αexclusive(D,ref) .- ndocc
+            b,  = βexclusive(D, ref) .- ndocc
+
+            p = phase(ref, D)
+
+            T3[i,j,k,a,b,c] =  p*Ccas[id]
+            T3[k,j,i,a,b,c] = -p*Ccas[id]
+            T3[i,j,k,c,b,a] = -p*Ccas[id]
+            T3[k,j,i,c,b,a] =  p*Ccas[id]
+
+
+        elseif αexc == 3 && βexc == 1
+            
+            # i > k > l, a > c > d
+            l,k,i = αexclusive(ref, D)
+            j, = βexclusive(ref, D)
+            d,c,a = αexclusive(D,ref) .- ndocc
+            b, = βexclusive(D, ref) .- ndocc
+
+            p = phase(ref, D)
+
+            T4aa[i,j,k,l,a,b,c,d] =  p*Ccas[id]
+            T4aa[i,j,k,l,c,b,d,a] =  p*Ccas[id]
+            T4aa[i,j,k,l,a,b,d,c] = -p*Ccas[id]
+            T4aa[i,j,k,l,c,b,a,d] = -p*Ccas[id]
+            T4aa[i,j,k,l,d,b,a,c] =  p*Ccas[id]
+            T4aa[i,j,k,l,d,b,c,a] = -p*Ccas[id]
+            T4aa[k,j,i,l,c,b,d,a] = -p*Ccas[id]
+            T4aa[k,j,i,l,a,b,d,c] =  p*Ccas[id]
+            T4aa[k,j,i,l,c,b,a,d] =  p*Ccas[id]
+            T4aa[k,j,i,l,a,b,c,d] = -p*Ccas[id]
+            T4aa[k,j,i,l,d,b,a,c] = -p*Ccas[id]
+            T4aa[k,j,i,l,d,b,c,a] =  p*Ccas[id]
+            T4aa[k,j,l,i,c,b,d,a] =  p*Ccas[id]
+            T4aa[k,j,l,i,a,b,d,c] = -p*Ccas[id]
+            T4aa[k,j,l,i,c,b,a,d] = -p*Ccas[id]
+            T4aa[k,j,l,i,a,b,c,d] =  p*Ccas[id]
+            T4aa[k,j,l,i,d,b,a,c] =  p*Ccas[id]
+            T4aa[k,j,l,i,d,b,c,a] = -p*Ccas[id]
+            T4aa[l,j,k,i,c,b,d,a] = -p*Ccas[id]
+            T4aa[l,j,k,i,a,b,d,c] =  p*Ccas[id]
+            T4aa[l,j,k,i,c,b,a,d] =  p*Ccas[id]
+            T4aa[l,j,k,i,a,b,c,d] = -p*Ccas[id]
+            T4aa[l,j,k,i,d,b,a,c] = -p*Ccas[id]
+            T4aa[l,j,k,i,d,b,c,a] =  p*Ccas[id]
+            T4aa[l,j,i,k,c,b,d,a] =  p*Ccas[id]
+            T4aa[l,j,i,k,a,b,d,c] = -p*Ccas[id]
+            T4aa[l,j,i,k,c,b,a,d] = -p*Ccas[id]
+            T4aa[l,j,i,k,a,b,c,d] =  p*Ccas[id]
+            T4aa[l,j,i,k,d,b,a,c] =  p*Ccas[id]
+            T4aa[l,j,i,k,d,b,c,a] = -p*Ccas[id]
+            T4aa[i,j,l,k,c,b,d,a] = -p*Ccas[id]
+            T4aa[i,j,l,k,a,b,d,c] =  p*Ccas[id]
+            T4aa[i,j,l,k,c,b,a,d] =  p*Ccas[id]
+            T4aa[i,j,l,k,a,b,c,d] = -p*Ccas[id]
+            T4aa[i,j,l,k,d,b,a,c] = -p*Ccas[id]
+            T4aa[i,j,l,k,d,b,c,a] =  p*Ccas[id]
+
+
+        elseif αexc == 2 && βexc == 2
+            
+            # i > k, j > l, a > c, b > d
+            k,i = αexclusive(ref, D)
+            l,j = βexclusive(ref, D)
+            c,a = αexclusive(D,ref) .- ndocc
+            d,b = βexclusive(D, ref) .- ndocc
+
+            p = phase(ref, D)
+
+            T4[i,j,k,l,a,b,c,d] =  p*Ccas[id]
+            T4[i,j,k,l,a,d,c,b] = -p*Ccas[id]
+            T4[i,j,k,l,c,d,a,b] =  p*Ccas[id]
+            T4[i,j,k,l,c,b,a,d] = -p*Ccas[id]
+            T4[k,j,i,l,a,d,c,b] =  p*Ccas[id]
+            T4[k,j,i,l,a,b,c,d] = -p*Ccas[id]
+            T4[k,j,i,l,c,d,a,b] = -p*Ccas[id]
+            T4[k,j,i,l,c,b,a,d] =  p*Ccas[id]
+            T4[k,l,i,j,a,d,c,b] = -p*Ccas[id]
+            T4[k,l,i,j,a,b,c,d] =  p*Ccas[id]
+            T4[k,l,i,j,c,d,a,b] =  p*Ccas[id]
+            T4[k,l,i,j,c,b,a,d] = -p*Ccas[id]
+            T4[i,l,k,j,a,d,c,b] =  p*Ccas[id]
+            T4[i,l,k,j,a,b,c,d] = -p*Ccas[id]
+            T4[i,l,k,j,c,d,a,b] = -p*Ccas[id]
+            T4[i,l,k,j,c,b,a,d] =  p*Ccas[id]
+
+        end
+
+    end
+
+    # Cluster Decomposition of T3
+    @tensoropt begin
+        T3[i,j,k,a,b,c] -= T1[j,b]*T1[i,a]*T1[k,c]
+        T3[i,j,k,a,b,c] += -0.5*T1[i,a]*T2[k,j,c,b]
+        T3[i,j,k,a,b,c] += T1[j,b]*T1[k,a]*T1[i,c]
+        T3[i,j,k,a,b,c] += 0.5*T1[k,a]*T2[i,j,c,b]
+        T3[i,j,k,a,b,c] += 0.5*T1[j,b]*T2[k,i,a,c]
+        T3[i,j,k,a,b,c] += -0.5*T1[j,b]*T2[i,k,a,c]
+        T3[i,j,k,a,b,c] += 0.5*T1[i,c]*T2[k,j,a,b]
+        T3[i,j,k,a,b,c] += -0.5*T1[k,c]*T2[i,j,a,b]
+    end
+
+    # Cluster Decomposition of T4aa
+    @tensoropt begin
+        T4aa[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[i,a]*T1[k,c]*T1[l,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T1[i,a]*T1[l,c]*T1[k,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T1[i,a]*T2[l,k,c,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[i,a]*T2[k,l,c,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[k,c]*T1[i,a]*T2[l,j,d,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[l,c]*T1[i,a]*T2[k,j,d,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[k,d]*T1[i,a]*T2[l,j,c,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[l,d]*T1[i,a]*T2[k,j,c,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[i,a]*T3[k,j,l,c,b,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T1[k,a]*T1[i,c]*T1[l,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[k,a]*T1[l,c]*T1[i,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[k,a]*T2[l,i,c,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T1[k,a]*T2[i,l,c,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[i,c]*T1[k,a]*T2[l,j,d,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[l,c]*T1[k,a]*T2[i,j,d,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[i,d]*T1[k,a]*T2[l,j,c,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[l,d]*T1[k,a]*T2[i,j,c,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[k,a]*T3[i,j,l,c,b,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[l,a]*T1[i,c]*T1[k,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T1[l,a]*T1[k,c]*T1[i,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T1[l,a]*T2[k,i,c,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[l,a]*T2[i,k,c,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[i,c]*T1[l,a]*T2[k,j,d,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[k,c]*T1[l,a]*T2[i,j,d,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[i,d]*T1[l,a]*T2[k,j,c,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[k,d]*T1[l,a]*T2[i,j,c,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[l,a]*T3[i,j,k,c,b,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[i,c]*T1[j,b]*T2[l,k,a,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[i,c]*T1[j,b]*T2[k,l,a,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[k,c]*T1[j,b]*T2[l,i,a,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[k,c]*T1[j,b]*T2[i,l,a,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[l,c]*T1[j,b]*T2[k,i,a,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[l,c]*T1[j,b]*T2[i,k,a,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[i,d]*T1[j,b]*T2[l,k,a,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[i,d]*T1[j,b]*T2[k,l,a,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[k,d]*T1[j,b]*T2[l,i,a,c]
+        T4aa[i,j,k,l,a,b,c,d] += T1[k,d]*T1[j,b]*T2[i,l,a,c]
+        T4aa[i,j,k,l,a,b,c,d] += T1[l,d]*T1[j,b]*T2[k,i,a,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[l,d]*T1[j,b]*T2[i,k,a,c]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T3[k,i,l,a,c,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[j,b]*T3[i,k,l,a,c,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[j,b]*T3[i,l,k,a,c,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[k,d]*T1[i,c]*T2[l,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[l,d]*T1[i,c]*T2[k,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[i,c]*T3[k,j,l,a,b,d]
+        T4aa[i,j,k,l,a,b,c,d] += T1[i,d]*T1[k,c]*T2[l,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[l,d]*T1[k,c]*T2[i,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[k,c]*T3[i,j,l,a,b,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[i,d]*T1[l,c]*T2[k,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[k,d]*T1[l,c]*T2[i,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] += T1[l,c]*T3[i,j,k,a,b,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[i,d]*T3[k,j,l,a,b,c]
+        T4aa[i,j,k,l,a,b,c,d] += T1[k,d]*T3[i,j,l,a,b,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T1[l,d]*T3[i,j,k,a,b,c]
+        T4aa[i,j,k,l,a,b,c,d] += T2[l,k,c,d]*T2[i,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[k,l,c,d]*T2[i,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[l,i,c,d]*T2[k,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] += T2[i,l,c,d]*T2[k,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] += T2[k,i,c,d]*T2[l,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[i,k,c,d]*T2[l,j,a,b]
+        T4aa[i,j,k,l,a,b,c,d] += T2[l,j,d,b]*T2[k,i,a,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[l,j,d,b]*T2[i,k,a,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[k,j,d,b]*T2[l,i,a,c]
+        T4aa[i,j,k,l,a,b,c,d] += T2[k,j,d,b]*T2[i,l,a,c]
+        T4aa[i,j,k,l,a,b,c,d] += T2[i,j,d,b]*T2[l,k,a,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[i,j,d,b]*T2[k,l,a,c]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[l,j,c,b]*T2[k,i,a,d]
+        T4aa[i,j,k,l,a,b,c,d] += T2[l,j,c,b]*T2[i,k,a,d]
+        T4aa[i,j,k,l,a,b,c,d] += T2[k,j,c,b]*T2[l,i,a,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[k,j,c,b]*T2[i,l,a,d]
+        T4aa[i,j,k,l,a,b,c,d] -= T2[i,j,c,b]*T2[l,k,a,d]
+        T4aa[i,j,k,l,a,b,c,d] += T2[i,j,c,b]*T2[k,l,a,d]
+    end
+
+    # Cluster decomposition of T4
+    @tensoropt begin
+        T4[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[i,a]*T1[k,c]*T1[l,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[i,a]*T2[k,l,c,d]
+        T4[i,j,k,l,a,b,c,d] += T1[l,b]*T1[i,a]*T1[k,c]*T1[j,d]
+        T4[i,j,k,l,a,b,c,d] += T1[l,b]*T1[i,a]*T2[k,j,c,d]
+        T4[i,j,k,l,a,b,c,d] += T1[k,c]*T1[i,a]*T2[l,j,b,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[k,c]*T1[i,a]*T2[j,l,b,d]
+        T4[i,j,k,l,a,b,c,d] += T1[j,d]*T1[i,a]*T2[k,l,c,b]
+        T4[i,j,k,l,a,b,c,d] -= T1[l,d]*T1[i,a]*T2[k,j,c,b]
+        T4[i,j,k,l,a,b,c,d] -= T1[i,a]*T3[j,k,l,b,c,d]
+        T4[i,j,k,l,a,b,c,d] += T1[j,b]*T1[k,a]*T1[i,c]*T1[l,d]
+        T4[i,j,k,l,a,b,c,d] += T1[j,b]*T1[k,a]*T2[i,l,c,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[l,b]*T1[k,a]*T1[i,c]*T1[j,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[l,b]*T1[k,a]*T2[i,j,c,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[i,c]*T1[k,a]*T2[l,j,b,d]
+        T4[i,j,k,l,a,b,c,d] += T1[i,c]*T1[k,a]*T2[j,l,b,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[j,d]*T1[k,a]*T2[i,l,c,b]
+        T4[i,j,k,l,a,b,c,d] += T1[l,d]*T1[k,a]*T2[i,j,c,b]
+        T4[i,j,k,l,a,b,c,d] += T1[k,a]*T3[j,i,l,b,c,d]
+        T4[i,j,k,l,a,b,c,d] += T1[i,c]*T1[j,b]*T2[k,l,a,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[k,c]*T1[j,b]*T2[i,l,a,d]
+        T4[i,j,k,l,a,b,c,d] += T1[l,d]*T1[j,b]*T2[k,i,a,c]
+        T4[i,j,k,l,a,b,c,d] -= T1[l,d]*T1[j,b]*T2[i,k,a,c]
+        T4[i,j,k,l,a,b,c,d] -= T1[j,b]*T3[i,l,k,a,d,c]
+        T4[i,j,k,l,a,b,c,d] -= T1[i,c]*T1[l,b]*T2[k,j,a,d]
+        T4[i,j,k,l,a,b,c,d] += T1[k,c]*T1[l,b]*T2[i,j,a,d]
+        T4[i,j,k,l,a,b,c,d] -= T1[j,d]*T1[l,b]*T2[k,i,a,c]
+        T4[i,j,k,l,a,b,c,d] += T1[j,d]*T1[l,b]*T2[i,k,a,c]
+        T4[i,j,k,l,a,b,c,d] += T1[l,b]*T3[i,j,k,a,d,c]
+        T4[i,j,k,l,a,b,c,d] -= T1[j,d]*T1[i,c]*T2[k,l,a,b]
+        T4[i,j,k,l,a,b,c,d] += T1[l,d]*T1[i,c]*T2[k,j,a,b]
+        T4[i,j,k,l,a,b,c,d] += T1[i,c]*T3[j,k,l,b,a,d]
+        T4[i,j,k,l,a,b,c,d] += T1[j,d]*T1[k,c]*T2[i,l,a,b]
+        T4[i,j,k,l,a,b,c,d] -= T1[l,d]*T1[k,c]*T2[i,j,a,b]
+        T4[i,j,k,l,a,b,c,d] -= T1[k,c]*T3[j,i,l,b,a,d]
+        T4[i,j,k,l,a,b,c,d] += T1[j,d]*T3[i,l,k,a,b,c]
+        T4[i,j,k,l,a,b,c,d] -= T1[l,d]*T3[i,j,k,a,b,c]
+        T4[i,j,k,l,a,b,c,d] -= T2[k,l,c,d]*T2[i,j,a,b]
+        T4[i,j,k,l,a,b,c,d] += T2[k,j,c,d]*T2[i,l,a,b]
+        T4[i,j,k,l,a,b,c,d] += T2[i,l,c,d]*T2[k,j,a,b]
+        T4[i,j,k,l,a,b,c,d] -= T2[i,j,c,d]*T2[k,l,a,b]
+        T4[i,j,k,l,a,b,c,d] -= T2[l,j,b,d]*T2[k,i,a,c]
+        T4[i,j,k,l,a,b,c,d] += T2[l,j,b,d]*T2[i,k,a,c]
+        T4[i,j,k,l,a,b,c,d] += T2[j,l,b,d]*T2[k,i,a,c]
+        T4[i,j,k,l,a,b,c,d] -= T2[j,l,b,d]*T2[i,k,a,c]
+        T4[i,j,k,l,a,b,c,d] += T2[k,l,c,b]*T2[i,j,a,d]
+        T4[i,j,k,l,a,b,c,d] -= T2[k,j,c,b]*T2[i,l,a,d]
+        T4[i,j,k,l,a,b,c,d] -= T2[i,l,c,b]*T2[k,j,a,d]
+        T4[i,j,k,l,a,b,c,d] += T2[i,j,c,b]*T2[k,l,a,d]
+    end
 
     return T1, T2, ecT1, ecT2
 end
