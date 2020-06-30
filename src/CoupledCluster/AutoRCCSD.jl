@@ -64,13 +64,13 @@ Compute new set of T1 and T2 amplitudes from old ones.
     d      Resolvent tensor D(i,a)
     D      Resolvent tensor D(i,j,a,b)
 """
-function update_amp(T1::Array{Float64, 2}, T2::Array{Float64, 4}, f::Tuple, V::Tuple, d::Array{Float64, 2}, D::Array{Float64, 4})
+function update_amp(T1::Array{Float64, 2}, T2::Array{Float64, 4}, newT1::Array{Float64,2}, newT2::Array{Float64,4}, f::Tuple, V::Tuple)
 
     Voooo, Vooov, Voovv, Vovov, Vovvv, Vvvvv = V
     fock_OO, fock_OV, fock_VV = f
 
-    newT1 = zeros(size(T1))
-    newT2 = zeros(size(T2))
+    fill!(newT1, 0.0)
+    fill!(newT2, 0.0)
 
     # Get new amplitudes
     @tensoropt (i=>x, j=>x, k=>x, l=>x, a=>100x, b=>100x, c=>100x, d=>100x) begin
@@ -166,15 +166,6 @@ function update_amp(T1::Array{Float64, 2}, T2::Array{Float64, 4}, f::Tuple, V::T
         newT2[i,j,a,b] += P_OoVv[i,j,a,b] + P_OoVv[j,i,b,a]
     end
 
-    # Apply the resolvent
-    newT1 = newT1./d
-    newT2 = newT2./D
-
-    # Compute residues 
-    r1 = sqrt(sum((newT1 - T1).^2))/length(T1)
-    r2 = sqrt(sum((newT2 - T2).^2))/length(T2)
-
-    return newT1, newT2, r1, r2
 end
 
 """
@@ -246,19 +237,15 @@ function do_rccsd(wfn::Wfn; kwargs...)
     D = [i + j - a - b for i = fock_Od, j = fock_Od, a = fock_Vd, b = fock_Vd]
     
     # Initial Amplitude. Note that f[2] = fock_OV and V[3] = Voovv.
-    T1 = f[2]./d
-    T2 = V[3]./D
+    newT1 = f[2]./d
+    newT2 = V[3]./D
     
     # Get MP2 energy. Note that f[2] = fock_OV and V[3] = Voovv.
-    Ecc = update_energy(T1, T2, f[2], V[3])
+    Ecc = update_energy(newT1, newT2, f[2], V[3])
     
     @output "Initial Amplitudes Guess: MP2\n"
     @output "MP2 Energy:   {:15.10f}\n\n" Ecc
     
-    r1 = 1
-    r2 = 1
-    dE = 1
-    rms = 1
     
     # Start CC iterations
 
@@ -268,18 +255,37 @@ function do_rccsd(wfn::Wfn; kwargs...)
     @output "   cc_e_conv   →  {:2.0e}\n" cc_e_conv
     @output "   cc_max_rms  →  {:2.0e}\n\n" cc_max_rms
     @output "{:10s}    {: 15s}    {: 12s}    {:12s}    {:10s}\n" "Iteration" "CC Energy" "ΔE" "Max RMS" "Time (s)"
+
+    r1 = 1
+    r2 = 1
+    dE = 1
+    rms = 1
     ite = 1
+    T1 = similar(newT1)
+    T2 = similar(newT2)
+
     while abs(dE) > cc_e_conv || rms > cc_max_rms
         if ite > cc_max_iter
             @output "\n⚠️  CC Equations did not converge in {:1.0d} iterations.\n" cc_max_iter
             break
         end
         t = @elapsed begin
-            T1, T2, r1, r2 = update_amp(T1, T2, f, V, d, D)
+
+            T1 .= newT1
+            T2 .= newT2
+            update_amp(T1, T2, newT1, newT2, f, V)
+
+            # Apply resolvent
+            newT1 ./= d
+            newT2 ./= D
+
+            # Compute residues 
+            r1 = sqrt(sum((newT1 - T1).^2))/length(T1)
+            r2 = sqrt(sum((newT2 - T2).^2))/length(T2)
         end
         rms = max(r1,r2)
         oldE = Ecc
-        Ecc = update_energy(T1, T2, f[2], V[3])
+        Ecc = update_energy(newT1, newT2, f[2], V[3])
         dE = Ecc - oldE
         @output "    {:<5.0d}    {:<15.10f}    {:<12.10f}    {:<12.10f}    {:<10.5f}\n" ite Ecc dE rms t
         ite += 1

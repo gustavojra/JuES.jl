@@ -39,7 +39,9 @@ defaults = Dict(
                 :cc_e_conv => 10^-10,
                 :diis => false,
                 :do_pT => false,
-                :fcn => 0
+                :fcn => 0,
+                :frozen => 0,
+                :active => 7
                )
 
 include("PerturbativeTriples.jl")

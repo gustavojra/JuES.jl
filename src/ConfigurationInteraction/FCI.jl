@@ -81,9 +81,11 @@ function do_fci(wfn::Wfn; kwargs...)
     @output "Hamiltonian Matrix size: {:10.6f} Mb\n" Base.summarysize(H)/10^6
 
     @output "Diagonalizing Hamiltonian for {:3d} eigenvalues...\n" nroot
-    @time λ, Φ = eigs(H, nev=nroot)
+    @time λ, ϕ = eigs(H, nev=nroot)
     @output "\n Final FCI Energy: {:15.10f}\n" λ[1]+wfn.vnuc
     #@output "Time: {:10.5f}\n" t
+
+    return λ, ϕ, dets
 
 end
 
