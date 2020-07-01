@@ -11,7 +11,19 @@ using JuES.CoupledCluster.AutoRCCSD
 
 export do_ecrccsd
 
-function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ndocc::Int, nvir::Int, frozen::Int, active::Int)
+function print_nicer(M)
+
+    println("\n")
+    for i in 1:size(M)[1]
+        println(M[i,:])
+    end
+    println("\n")
+end
+
+function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ndocc::Int, nvir::Int, frozen::Int, active::Int, f::Tuple, V::Tuple)
+
+    Voooo, Vooov, Voovv, Vovov, Vovvv, Vvvvv = V
+    fock_OO, fock_OV, fock_VV = f
 
     # Initialize arrays
     T1 = zeros(ndocc, nvir)
@@ -35,6 +47,12 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
                 a = αexclusive(D, ref)[1] - ndocc
 
                 p = phase(ref, D)
+
+                if i == 1 && a == 1
+                    showdet(ref, 7)
+                    showdet(D, 7)
+                    println(p)
+                end
 
                 @inbounds T1[i,a] = Ccas[id]*p
 
@@ -184,14 +202,14 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
 
     # Cluster Decomposition of T3
     @tensoropt begin
-        T3[i,j,k,a,b,c] -= T1[j,b]*T1[i,a]*T1[k,c]
-        T3[i,j,k,a,b,c] += -0.5*T1[i,a]*T2[k,j,c,b]
-        T3[i,j,k,a,b,c] += T1[j,b]*T1[k,a]*T1[i,c]
-        T3[i,j,k,a,b,c] += 0.5*T1[k,a]*T2[i,j,c,b]
-        T3[i,j,k,a,b,c] += 0.5*T1[j,b]*T2[k,i,a,c]
-        T3[i,j,k,a,b,c] += -0.5*T1[j,b]*T2[i,k,a,c]
-        T3[i,j,k,a,b,c] += 0.5*T1[i,c]*T2[k,j,a,b]
-        T3[i,j,k,a,b,c] += -0.5*T1[k,c]*T2[i,j,a,b]
+        T3[i,j,k,a,b,c] -= T1[i,a]*T1[j,b]*T1[k,c]
+        T3[i,j,k,a,b,c] += T1[i,c]*T1[j,b]*T1[k,a]
+        T3[i,j,k,a,b,c] -= T1[i,a]*T2[k,j,c,b]
+        T3[i,j,k,a,b,c] += T1[k,a]*T2[i,j,c,b]
+        T3[i,j,k,a,b,c] += T1[i,c]*T2[k,j,a,b]
+        T3[i,j,k,a,b,c] -= T1[k,c]*T2[i,j,a,b]
+        T3[i,j,k,a,b,c] += T1[j,b]*T2[k,i,a,c]
+        T3[i,j,k,a,b,c] -= T1[j,b]*T2[i,k,a,c]
     end
 
     # Cluster Decomposition of T4aa
@@ -322,6 +340,70 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
         T4[i,j,k,l,a,b,c,d] += T2[i,j,c,b]*T2[k,l,a,d]
     end
 
+
+    # Compute ecT1
+    @tensoropt begin
+
+        #ecT1[i,a] += T3[m,i,n,e,a,f]*Voovv[m,n,e,f]
+        #ecT1[i,a] += 6*T3[i,m,n,a,e,f]*Voovv[m,n,e,f]
+        #ecT1[i,a] -= T3[m,i,n,a,e,f]*Voovv[m,n,e,f]
+        #ecT1[i,a] += -2*T3[i,n,m,a,e,f]*Voovv[m,n,e,f]
+        #ecT1[i,a] -= T3[m,i,n,e,a,f]*Voovv[n,m,e,f]
+        #ecT1[i,a] += T3[m,i,n,a,e,f]*Voovv[n,m,e,f]
+        ecT1[i,a] += 0.25*T3[m,i,n,e,a,f]*Voovv[m,n,e,f]
+        ecT1[i,a] += 1.5*T3[i,m,n,a,e,f]*Voovv[m,n,e,f]
+        ecT1[i,a] += -0.25*T3[m,i,n,a,e,f]*Voovv[m,n,e,f]
+        ecT1[i,a] += -0.5*T3[i,n,m,a,e,f]*Voovv[m,n,e,f]
+        ecT1[i,a] += -0.25*T3[m,i,n,e,a,f]*Voovv[n,m,e,f]
+        ecT1[i,a] += 0.25*T3[m,i,n,a,e,f]*Voovv[n,m,e,f]
+    end
+
+    # Compute ecT2
+    @tensor begin
+        ecT2[i,j,a,b] += fock_OV[m,e]*T3[j,i,m,b,a,e]
+        ecT2[i,j,a,b] += fock_OV[m,e]*T3[i,j,m,a,b,e]
+        ecT2[i,j,a,b] += -0.5*T3[i,j,m,e,b,f]*Vovvv[m,a,e,f]
+        ecT2[i,j,a,b] += 0.5*T3[i,j,m,e,b,f]*Vovvv[m,a,f,e]
+        ecT2[i,j,a,b] += T3[j,i,m,b,e,f]*Vovvv[m,a,f,e]
+        ecT2[i,j,a,b] += 0.5*T3[m,j,n,a,b,e]*Vooov[n,m,i,e]
+        ecT2[i,j,a,b] += -0.5*T3[m,j,n,a,b,e]*Vooov[m,n,i,e]
+        ecT2[i,j,a,b] -= T3[j,m,n,b,a,e]*Vooov[m,n,i,e]
+        ecT2[i,j,a,b] += 0.5*T3[m,i,n,b,a,e]*Vooov[n,m,j,e]
+        ecT2[i,j,a,b] -= T3[i,m,n,a,b,e]*Vooov[m,n,j,e]
+        ecT2[i,j,a,b] += -0.5*T3[m,i,n,b,a,e]*Vooov[m,n,j,e]
+        ecT2[i,j,a,b] += -0.5*T3[j,i,m,e,a,f]*Vovvv[m,b,e,f]
+        ecT2[i,j,a,b] += T3[i,j,m,a,e,f]*Vovvv[m,b,f,e]
+        ecT2[i,j,a,b] += 0.5*T3[j,i,m,e,a,f]*Vovvv[m,b,f,e]
+        ecT2[i,j,a,b] -= T1[n,b]*T3[i,j,m,a,e,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += -0.5*T1[n,b]*T3[j,i,m,e,a,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += 0.5*T1[n,b]*T3[j,i,m,e,a,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += 0.5*T1[m,a]*T3[i,j,n,e,b,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += -0.5*T1[m,a]*T3[i,j,n,e,b,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] -= T1[m,a]*T3[j,i,n,b,f,e]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] -= T1[j,e]*T3[i,m,n,a,b,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += 0.5*T1[j,e]*T3[m,i,n,b,a,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += -0.5*T1[j,e]*T3[m,i,n,b,a,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += 0.5*T1[i,e]*T3[m,j,n,a,b,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += -0.5*T1[i,e]*T3[m,j,n,a,b,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] -= T1[i,e]*T3[j,n,m,b,a,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] -= T1[m,e]*T3[i,j,n,a,b,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += 2.0*T1[m,e]*T3[i,j,n,a,b,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] -= T1[m,e]*T3[j,i,n,b,a,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += 2.0*T1[m,e]*T3[j,i,n,b,a,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += 0.25*T4aa[j,i,m,n,b,a,e,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += 0.25*T4[i,j,n,m,a,b,f,e]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += 0.25*T4[i,j,m,n,a,b,e,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += 0.25*T4aa[i,j,m,n,a,b,e,f]*Voovv[m,n,e,f]
+        ecT2[i,j,a,b] += -0.25*T4aa[j,i,m,n,b,a,e,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += 0.25*T4[i,j,n,m,a,b,e,f]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += 0.25*T4[i,j,m,n,a,b,f,e]*Voovv[n,m,e,f]
+        ecT2[i,j,a,b] += -0.25*T4aa[i,j,m,n,a,b,e,f]*Voovv[n,m,e,f]
+
+    end
+
+    #for i in sort(T4[:], rev=true)[1:30]
+    #    println(i)
+    #end
     return T1, T2, ecT1, ecT2
 end
 
@@ -346,6 +428,7 @@ function do_ecrccsd(wfn::Wfn; kwargs...)
     nmo = wfn.nmo
     ndocc = Int(nelec/2)
     nvir = nmo - ndocc
+    vnuc = 8.888064120957244
     
     @output "\n   Calling FCI module...\n\n"
     # Compute CASCI
@@ -390,12 +473,12 @@ function do_ecrccsd(wfn::Wfn; kwargs...)
     D = [i + j - a - b for i = fock_Od, j = fock_Od, a = fock_Vd, b = fock_Vd]
 
 
-    newT1, newT2, ecT1, ecT2 = cas_decomposition(Ccas, dets, ndocc, nvir, frozen, active)
+    newT1, newT2, ecT1, ecT2 = cas_decomposition(Ccas, dets, ndocc, nvir, frozen, active, f, V)
 
     # Energy from CAS vector
     Ecc = update_energy(newT1, newT2, f[2], V[3])
 
-    @output "Energy from the CAS Vector:   {:15.10f}\n\n" Ecc+wfn.energy
+    @output "Energy from the CAS Vector:   {:15.10f}\n\n" Ecc+wfn.energy+vnuc
 
     # Start CC iterations
 
@@ -449,16 +532,7 @@ function do_ecrccsd(wfn::Wfn; kwargs...)
     if abs(dE) < cc_e_conv && rms < cc_max_rms
         @output "\n 🍾 Equations Converged!\n"
     end
-    @output "\n⇒ Final ecCCSD Energy:     {:15.10f}\n" Ecc+wfn.energy
-
-    if do_pT
-        Vvvvo = permutedims(V[5], [4,2,3,1])
-        Vvooo = permutedims(V[2], [4,2,1,3])
-        Vvovo = permutedims(V[3], [3,1,4,2])
-        Ept = compute_pT(T1=T1, T2=T2, Vvvvo=Vvvvo, Vvooo=Vvooo, Vvovo=Vvovo, fo=fock_Od, fv=fock_Vd)
-        @output "\n⇒ Final CCSD(T) Energy:  {:15.10f}\n" Ecc+wfn.energy+Ept
-    end
-
+    @output "\n⇒ Final ecCCSD Energy:     {:15.10f}\n" Ecc+wfn.energy+vnuc
 
 end
 
