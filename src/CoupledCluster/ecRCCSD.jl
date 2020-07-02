@@ -20,16 +20,16 @@ function print_nicer(M)
     println("\n")
 end
 
-function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ndocc::Int, nvir::Int, frozen::Int, active::Int, f::Tuple, V::Tuple)
+function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ndocc::Int, nvir::Int, frozen::Int, active::Int, f::Tuple, V::Tuple, fcn::Int)
 
     Voooo, Vooov, Voovv, Vovov, Vovvv, Vvvvv = V
     fock_OO, fock_OV, fock_VV = f
 
     # Initialize arrays
-    T1 = zeros(ndocc, nvir)
-    T2 = zeros(ndocc, ndocc, nvir, nvir)
-    ecT1 = zeros(ndocc, nvir)
-    ecT2 = zeros(ndocc, ndocc, nvir, nvir)
+    T1 = zeros(size(fock_OV))
+    T2 = zeros(size(Voovv))
+    ecT1 = zeros(size(fock_OV))
+    ecT2 = zeros(size(Voovv))
 
     # Build T1 and T2 from CAS
     ref = dets[1]
@@ -43,25 +43,19 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
             
             if βexc == 0
 
-                i, = αexclusive(ref, D)
-                a = αexclusive(D, ref)[1] - ndocc
+                i, = αexclusive(ref, D) .- fcn
+                a, = αexclusive(D, ref) .- ndocc
 
                 p = phase(ref, D)
-
-                if i == 1 && a == 1
-                    showdet(ref, 7)
-                    showdet(D, 7)
-                    println(p)
-                end
 
                 @inbounds T1[i,a] = Ccas[id]*p
 
             elseif βexc == 1
 
-                i, = αexclusive(ref, D)
-                j, = βexclusive(ref, D)
-                a = αexclusive(D, ref)[1] - ndocc
-                b = βexclusive(D, ref)[1] - ndocc
+                i, = αexclusive(ref, D) .- fcn
+                j, = βexclusive(ref, D) .- fcn
+                a, = αexclusive(D, ref) .- ndocc
+                b, = βexclusive(D, ref) .- ndocc
 
                 p = phase(ref, D)
 
@@ -90,14 +84,10 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
 
     end
 
-    println("\nActive Occ: $actocc")
-    println("Active Vir: $actvir\n")
-
-
     # Build T3, T4 and T4aa
-    T3 = zeros(ndocc, ndocc, ndocc, nvir, nvir, nvir)
-    T4 = zeros(ndocc, ndocc, ndocc, ndocc, nvir, nvir, nvir, nvir)
-    T4aa = zeros(ndocc, ndocc, ndocc, ndocc, nvir, nvir, nvir, nvir)
+    T3 = zeros(ndocc-fcn, ndocc-fcn, ndocc-fcn, nvir, nvir, nvir)
+    T4 = zeros(ndocc-fcn, ndocc-fcn, ndocc-fcn, ndocc-fcn, nvir, nvir, nvir, nvir)
+    T4aa = zeros(ndocc-fcn, ndocc-fcn, ndocc-fcn, ndocc-fcn, nvir, nvir, nvir, nvir)
 
     for id in eachindex(dets)
        
@@ -108,8 +98,8 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
         if αexc == 2 && βexc == 1
             
             # i > k, a > c
-            k,i = αexclusive(ref, D)
-            j,  = βexclusive(ref, D)
+            k,i = αexclusive(ref, D) .- fcn
+            j,  = βexclusive(ref, D) .- fcn
             c,a = αexclusive(D,ref) .- ndocc
             b,  = βexclusive(D, ref) .- ndocc
 
@@ -124,8 +114,8 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
         elseif αexc == 3 && βexc == 1
             
             # i > k > l, a > c > d
-            l,k,i = αexclusive(ref, D)
-            j, = βexclusive(ref, D)
+            l,k,i = αexclusive(ref, D) .- fcn
+            j, = βexclusive(ref, D) .- fcn
             d,c,a = αexclusive(D,ref) .- ndocc
             b, = βexclusive(D, ref) .- ndocc
 
@@ -172,8 +162,8 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
         elseif αexc == 2 && βexc == 2
             
             # i > k, j > l, a > c, b > d
-            k,i = αexclusive(ref, D)
-            l,j = βexclusive(ref, D)
+            k,i = αexclusive(ref, D) .- fcn
+            l,j = βexclusive(ref, D) .- fcn
             c,a = αexclusive(D,ref) .- ndocc
             d,b = βexclusive(D, ref) .- ndocc
 
@@ -343,13 +333,6 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
 
     # Compute ecT1
     @tensoropt begin
-
-        #ecT1[i,a] += T3[m,i,n,e,a,f]*Voovv[m,n,e,f]
-        #ecT1[i,a] += 6*T3[i,m,n,a,e,f]*Voovv[m,n,e,f]
-        #ecT1[i,a] -= T3[m,i,n,a,e,f]*Voovv[m,n,e,f]
-        #ecT1[i,a] += -2*T3[i,n,m,a,e,f]*Voovv[m,n,e,f]
-        #ecT1[i,a] -= T3[m,i,n,e,a,f]*Voovv[n,m,e,f]
-        #ecT1[i,a] += T3[m,i,n,a,e,f]*Voovv[n,m,e,f]
         ecT1[i,a] += 0.25*T3[m,i,n,e,a,f]*Voovv[m,n,e,f]
         ecT1[i,a] += 1.5*T3[i,m,n,a,e,f]*Voovv[m,n,e,f]
         ecT1[i,a] += -0.25*T3[m,i,n,a,e,f]*Voovv[m,n,e,f]
@@ -401,9 +384,6 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
 
     end
 
-    #for i in sort(T4[:], rev=true)[1:30]
-    #    println(i)
-    #end
     return T1, T2, ecT1, ecT2
 end
 
@@ -473,7 +453,7 @@ function do_ecrccsd(wfn::Wfn; kwargs...)
     D = [i + j - a - b for i = fock_Od, j = fock_Od, a = fock_Vd, b = fock_Vd]
 
 
-    newT1, newT2, ecT1, ecT2 = cas_decomposition(Ccas, dets, ndocc, nvir, frozen, active, f, V)
+    newT1, newT2, ecT1, ecT2 = cas_decomposition(Ccas, dets, ndocc, nvir, frozen, active, f, V, fcn)
 
     # Energy from CAS vector
     Ecc = update_energy(newT1, newT2, f[2], V[3])
