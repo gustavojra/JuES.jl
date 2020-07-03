@@ -62,8 +62,10 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
                 @inbounds T2[i,j,a,b] = Ccas[id]*p
             end
 
+        elseif (αexc + βexc) > 2
+            # This line relies on the fact the dets are ordered by excitation level
+            break
         end
-
     end
 
     @tensor T2[i,j,a,b] -= T1[i,a]*T1[j,b] 
@@ -73,15 +75,13 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
     actvir = []
 
     for no in 1:(ndocc+nvir)
-        
+
         if frozen < no ≤ ndocc
             push!(actocc, no)
 
         elseif ndocc < no ≤ (frozen+active)
             push!(actvir, no)
-
         end
-
     end
 
     # Build T3, T4 and T4aa
@@ -332,56 +332,76 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
 
 
     # Compute ecT1
-    @tensoropt begin
-        ecT1[i,a] += 0.25*T3[m,i,n,e,a,f]*Voovv[m,n,e,f]
-        ecT1[i,a] += 1.5*T3[i,m,n,a,e,f]*Voovv[m,n,e,f]
-        ecT1[i,a] += -0.25*T3[m,i,n,a,e,f]*Voovv[m,n,e,f]
-        ecT1[i,a] += -0.5*T3[i,n,m,a,e,f]*Voovv[m,n,e,f]
-        ecT1[i,a] += -0.25*T3[m,i,n,e,a,f]*Voovv[n,m,e,f]
-        ecT1[i,a] += 0.25*T3[m,i,n,a,e,f]*Voovv[n,m,e,f]
-    end
+    for n in (actocc .- fcn)
+        for f in (actvir .- ndocc)
+            T3_3n6f = view(T3, :, :, n, :, :, f)
+            Voovv_1n4f = view(Voovv, n, :, :, f)
+            Voovv_2n4f = view(Voovv, :, n, :, f)
+            Voovv_1n3f = view(Voovv, n, :, f, :)
+            Vovvv_1n4f = view(Vovvv, n, :, :, f)
+            Vovvv_1n3f = view(Vovvv, n, :, f, :)
+            Vooov_1n3f = view(Vooov, n, :, f, :)
+            Vooov_1n4f = view(Vooov, n, :, :, f)
+            Vooov_2n4f = view(Vooov, :, n, :, f)
+            fock_OV_1n2f = fock_OV[n,f]
 
-    # Compute ecT2
-    @tensor begin
-        ecT2[i,j,a,b] += fock_OV[m,e]*T3[j,i,m,b,a,e]
-        ecT2[i,j,a,b] += fock_OV[m,e]*T3[i,j,m,a,b,e]
-        ecT2[i,j,a,b] += -0.5*T3[i,j,m,e,b,f]*Vovvv[m,a,e,f]
-        ecT2[i,j,a,b] += 0.5*T3[i,j,m,e,b,f]*Vovvv[m,a,f,e]
-        ecT2[i,j,a,b] += T3[j,i,m,b,e,f]*Vovvv[m,a,f,e]
-        ecT2[i,j,a,b] += 0.5*T3[m,j,n,a,b,e]*Vooov[n,m,i,e]
-        ecT2[i,j,a,b] += -0.5*T3[m,j,n,a,b,e]*Vooov[m,n,i,e]
-        ecT2[i,j,a,b] -= T3[j,m,n,b,a,e]*Vooov[m,n,i,e]
-        ecT2[i,j,a,b] += 0.5*T3[m,i,n,b,a,e]*Vooov[n,m,j,e]
-        ecT2[i,j,a,b] -= T3[i,m,n,a,b,e]*Vooov[m,n,j,e]
-        ecT2[i,j,a,b] += -0.5*T3[m,i,n,b,a,e]*Vooov[m,n,j,e]
-        ecT2[i,j,a,b] += -0.5*T3[j,i,m,e,a,f]*Vovvv[m,b,e,f]
-        ecT2[i,j,a,b] += T3[i,j,m,a,e,f]*Vovvv[m,b,f,e]
-        ecT2[i,j,a,b] += 0.5*T3[j,i,m,e,a,f]*Vovvv[m,b,f,e]
-        ecT2[i,j,a,b] -= T1[n,b]*T3[i,j,m,a,e,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += -0.5*T1[n,b]*T3[j,i,m,e,a,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += 0.5*T1[n,b]*T3[j,i,m,e,a,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += 0.5*T1[m,a]*T3[i,j,n,e,b,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += -0.5*T1[m,a]*T3[i,j,n,e,b,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] -= T1[m,a]*T3[j,i,n,b,f,e]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] -= T1[j,e]*T3[i,m,n,a,b,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += 0.5*T1[j,e]*T3[m,i,n,b,a,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += -0.5*T1[j,e]*T3[m,i,n,b,a,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += 0.5*T1[i,e]*T3[m,j,n,a,b,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += -0.5*T1[i,e]*T3[m,j,n,a,b,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] -= T1[i,e]*T3[j,n,m,b,a,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] -= T1[m,e]*T3[i,j,n,a,b,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += 2.0*T1[m,e]*T3[i,j,n,a,b,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] -= T1[m,e]*T3[j,i,n,b,a,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += 2.0*T1[m,e]*T3[j,i,n,b,a,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += 0.25*T4aa[j,i,m,n,b,a,e,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += 0.25*T4[i,j,n,m,a,b,f,e]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += 0.25*T4[i,j,m,n,a,b,e,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += 0.25*T4aa[i,j,m,n,a,b,e,f]*Voovv[m,n,e,f]
-        ecT2[i,j,a,b] += -0.25*T4aa[j,i,m,n,b,a,e,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += 0.25*T4[i,j,n,m,a,b,e,f]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += 0.25*T4[i,j,m,n,a,b,f,e]*Voovv[n,m,e,f]
-        ecT2[i,j,a,b] += -0.25*T4aa[i,j,m,n,a,b,e,f]*Voovv[n,m,e,f]
+            @tensoropt begin
 
+                # Compute ecT1
+                ecT1[i,a] += 0.25*T3_3n6f[m,i,e,a]*Voovv_2n4f[m,e]
+                ecT1[i,a] += 1.5*T3_3n6f[i,m,a,e]*Voovv_2n4f[m,e]
+                ecT1[i,a] += -0.25*T3_3n6f[m,i,a,e]*Voovv_2n4f[m,e]
+                ecT1[i,a] += -0.5*T3_3n6f[i,m,a,e]*Voovv_1n4f[m,e]
+                ecT1[i,a] += -0.25*T3_3n6f[m,i,e,a]*Voovv_1n4f[m,e]
+                ecT1[i,a] += 0.25*T3_3n6f[m,i,a,e]*Voovv_1n4f[m,e]
+
+                # Compute ecT2
+                ecT2[i,j,a,b] += fock_OV_1n2f*T3_3n6f[j,i,b,a]   # Maybe those two are the same?
+                ecT2[i,j,a,b] += fock_OV_1n2f*T3_3n6f[i,j,a,b]
+                ecT2[i,j,a,b] += -0.5*T3_3n6f[i,j,e,b]*Vovvv_1n4f[a,e]
+                ecT2[i,j,a,b] += 0.5*T3_3n6f[i,j,e,b]*Vovvv_1n3f[a,e]
+                ecT2[i,j,a,b] += T3_3n6f[j,i,b,e]*Vovvv_1n3f[a,e]
+                ecT2[i,j,a,b] += 0.5*T3_3n6f[m,j,a,b]*Vooov_1n4f[m,i]
+                ecT2[i,j,a,b] += -0.5*T3_3n6f[m,j,a,b]*Vooov_2n4f[m,i]
+                ecT2[i,j,a,b] -= T3_3n6f[j,m,b,a]*Vooov_2n4f[m,i]
+                ecT2[i,j,a,b] += 0.5*T3_3n6f[m,i,b,a]*Vooov_1n4f[m,j]
+                ecT2[i,j,a,b] -= T3_3n6f[i,m,a,b]*Vooov_2n4f[m,j]
+                ecT2[i,j,a,b] += -0.5*T3_3n6f[m,i,b,a]*Vooov_2n4f[m,j]
+                ecT2[i,j,a,b] += -0.5*T3_3n6f[j,i,e,a]*Vovvv_1n4f[b,e]
+                ecT2[i,j,a,b] += T3_3n6f[i,j,a,e]*Vovvv_1n3f[b,e]
+                ecT2[i,j,a,b] += 0.5*T3_3n6f[j,i,e,a]*Vovvv_1n3f[b,e]
+                ecT2[i,j,a,b] -= T1[m,b]*T3_3n6f[i,j,a,e]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] += -0.5*T1[m,b]*T3_3n6f[j,i,e,a]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] += 0.5*T1[m,b]*T3_3n6f[j,i,e,a]*Voovv_1n4f[m,e]
+                ecT2[i,j,a,b] += 0.5*T1[m,a]*T3_3n6f[i,j,e,b]*Voovv_1n4f[m,e]
+                ecT2[i,j,a,b] += -0.5*T1[m,a]*T3_3n6f[i,j,e,b]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] -= T1[m,a]*T3_3n6f[j,i,b,e]*Voovv_1n3f[m,e]
+                ecT2[i,j,a,b] -= T1[j,e]*T3_3n6f[i,m,a,b]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] += 0.5*T1[j,e]*T3_3n6f[m,i,b,a]*Voovv_1n4f[m,e]
+                ecT2[i,j,a,b] += -0.5*T1[j,e]*T3_3n6f[m,i,b,a]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] += 0.5*T1[i,e]*T3_3n6f[m,j,a,b]*Voovv_1n4f[m,e]
+                ecT2[i,j,a,b] += -0.5*T1[i,e]*T3_3n6f[m,j,a,b]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] -= T1[i,e]*T3_3n6f[j,m,b,a]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] -= T1[m,e]*T3_3n6f[i,j,a,b]*Voovv_1n4f[m,e]
+                ecT2[i,j,a,b] += 2.0*T1[m,e]*T3_3n6f[i,j,a,b]*Voovv_2n4f[m,e]
+                ecT2[i,j,a,b] -= T1[m,e]*T3_3n6f[j,i,b,a]*Voovv_1n4f[m,e]
+                ecT2[i,j,a,b] += 2.0*T1[m,e]*T3_3n6f[j,i,b,a]*Voovv_2n4f[m,e]
+            end
+
+            for m in (actocc .- fcn)
+                for e in (actvir .- ndocc)
+
+                    T4_3m4n7e8f = view(T4, :, :, m, n, :, :, e, f)
+                    T4aa_3m4n7e8f = view(T4aa, :, :, m, n, :, :, e, f)
+                    Voovv_1m2n3e4f = Voovv[m,n,e,f]
+                    Voovv_1n2m3e4f = Voovv[n,m,e,f]
+
+                    ecT2 += T4_3m4n7e8f.*Voovv_1m2n3e4f
+                    ecT2 += 0.25.*T4aa_3m4n7e8f.*(Voovv_1m2n3e4f - Voovv_1n2m3e4f)
+                    ecT2 += 0.25.*permutedims(T4aa_3m4n7e8f, [2,1,4,3]).*(Voovv_1m2n3e4f - Voovv_1n2m3e4f)
+                end
+            end
+        end
     end
 
     return T1, T2, ecT1, ecT2
@@ -453,7 +473,8 @@ function do_ecrccsd(wfn::Wfn; kwargs...)
     D = [i + j - a - b for i = fock_Od, j = fock_Od, a = fock_Vd, b = fock_Vd]
 
 
-    newT1, newT2, ecT1, ecT2 = cas_decomposition(Ccas, dets, ndocc, nvir, frozen, active, f, V, fcn)
+    @output "Starting Cluster Decomposition...\n"
+    @time newT1, newT2, ecT1, ecT2 = cas_decomposition(Ccas, dets, ndocc, nvir, frozen, active, f, V, fcn)
 
     # Energy from CAS vector
     Ecc = update_energy(newT1, newT2, f[2], V[3])
