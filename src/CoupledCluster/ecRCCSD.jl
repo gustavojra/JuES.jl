@@ -11,28 +11,11 @@ using JuES.CoupledCluster.AutoRCCSD
 
 export do_ecrccsd
 
-function print_nicer(M)
+function get_casT1_casT2(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref::Determinant, fcn::Int, ndocc::Int, nvir::Int)
 
-    println("\n")
-    for i in 1:size(M)[1]
-        println(M[i,:])
-    end
-    println("\n")
-end
+    T1 = zeros(ndocc-fcn, nvir)
+    T2 = zeros(ndocc-fcn, ndocc-fcn, nvir, nvir)
 
-function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ndocc::Int, nvir::Int, frozen::Int, active::Int, f::Tuple, V::Tuple, fcn::Int)
-
-    Voooo, Vooov, Voovv, Vovov, Vovvv, Vvvvv = V
-    fock_OO, fock_OV, fock_VV = f
-
-    # Initialize arrays
-    T1 = zeros(size(fock_OV))
-    T2 = zeros(size(Voovv))
-    ecT1 = zeros(size(fock_OV))
-    ecT2 = zeros(size(Voovv))
-
-    # Build T1 and T2 from CAS
-    ref = dets[1]
     for id in eachindex(dets)
        
         @inbounds D = dets[id]
@@ -69,6 +52,258 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
     end
 
     @tensor T2[i,j,a,b] -= T1[i,a]*T1[j,b] 
+
+    return T1, T2
+end
+
+function get_casT3(n::Int, f::Int, Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref::Determinant, fcn::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4})
+
+    T3 = zeros(size(T2))
+
+    for id in eachindex(dets)
+
+        @inbounds D = dets[id]
+        αexc = αexcitation_level(ref, D)
+        βexc = βexcitation_level(ref, D)
+    
+        if αexc == 2 && βexc == 1
+            
+            # i > k, a > c
+            k,i = αexclusive(ref, D) .- fcn
+            j,  = βexclusive(ref, D) .- fcn
+    
+            if !(n in [k,i])
+                continue
+            end
+    
+            c,a = αexclusive(D,ref) .- ndocc
+            b,  = βexclusive(D, ref) .- ndocc
+    
+            if !(f in [c,a])
+                continue
+            end
+    
+            p = phase(ref, D)
+    
+            if n == i
+                p = -p
+                o1 = k
+            else
+                o1 = i
+            end
+    
+            if f == a
+                p = -p
+                o3 = c
+            else
+                o3 = a
+            end
+    
+            T3[o1,j,o3,b] = p*Ccas[id]
+                
+        elseif (αexc + βexc) > 3
+            break
+        end
+    end
+
+    # Arrays for decomposition
+    T1_1n2f = T1[n,f]
+    T1_2f = view(T1,:,f)
+    T1_1n = view(T1,n,:)
+    T2_1n3f = view(T2,n,:,f,:)
+    T2_3f = view(T2,:,:,f,:)
+    T2_1n = view(T2,n,:,:,:)
+    T2_1n4f = view(T2,n,:,:,f)
+    T2_2n4f = view(T2,:,n,:,f)
+
+    @tensoropt begin
+        # Decomposition of T3
+        T3[i,j,a,b] -= T1[i,a]*T1[j,b]*T1_1n2f
+        T3[i,j,a,b] += T1_2f[i]*T1[j,b]*T1_1n[a]
+        T3[i,j,a,b] -= T1[i,a]*T2_1n3f[j,b]
+        T3[i,j,a,b] += T1_1n[a]*T2_3f[i,j,b]
+        T3[i,j,a,b] += T1_2f[i]*T2_1n[j,a,b] - T1_1n2f*T2[i,j,a,b]
+        T3[i,j,a,b] += T1[j,b]*T2_1n4f[i,a]
+        T3[i,j,a,b] -= T1[j,b]*T2_2n4f[i,a]
+    end
+
+    return T3
+end
+
+function get_casT4(m::Int, n::Int, e::Int, f::Int, Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref::Determinant, fcn::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4})
+    # Build T4
+    T4 =  zeros(size(T2))
+    for id in eachindex(dets)
+       
+        @inbounds D = dets[id]
+        αexc = αexcitation_level(ref, D)
+        βexc = βexcitation_level(ref, D)
+        if αexc == 2 && βexc == 2
+             
+            # i > k, j > l, a > c, b > d
+            k,i = αexclusive(ref, D) .- fcn
+    
+            if !(m in [i,k])
+                continue
+            end
+    
+            l,j = βexclusive(ref, D) .- fcn
+    
+            if !(n in [l,j])
+                continue
+            end
+    
+            c,a = αexclusive(D,ref) .- ndocc
+    
+            if !(e in [c,a])
+                continue
+            end
+    
+            d,b = βexclusive(D, ref) .- ndocc
+    
+            if !(f in [d,b])
+                continue
+            end
+    
+            p = phase(ref, D)
+    
+            if m == i
+                p = -p
+                o1 = k
+            else
+                o1 = i
+            end
+    
+            if n == j
+                p = -p
+                o2 = l
+            else
+                o2 = j
+            end
+    
+            if e == a
+                p = -p
+                o3 = c
+            else
+                o3 = a
+            end
+    
+            if f == b
+                p = -p
+                o4 = d
+            else
+                o4 = b
+            end
+    
+            T4[o1,o2,o3,o4] =  p*Ccas[id]
+    
+        elseif (αexc + βexc) > 4
+            break
+        end
+    end                 
+
+    T1_1m2e = T1[m,e]
+    T1_1n2f = T1[n,f]
+    pT1 = T1_1m2e*T1_1n2f
+    T1_1n = view(T1,n,:)
+    T1_2f = view(T1,:,f)
+    T1_1m = view(T1,m,:)
+    T1_2e = view(T1,:,e)
+
+    T2_1m2n3e4f = T2[m,n,e,f]
+    T2_1m3e4f = view(T2,m,:,e,f)
+    T2_1n4f = view(T2,n,:,:,f)
+    T2_2n4f = view(T2,:,n,:,f)
+    T2_1m2n3e = view(T2,m,n,e,:)
+    T2_1m3e = view(T2,m,:,e,:)
+    T2_2n3e4f = view(T2,:,n,e,f)
+    T2_3e4f = view(T2,:,:,e,f)
+    T2_2n3e = view(T2,:,n,e,:)
+    T2_3e = view(T2,:,:,e,:)
+    T2_1m2n4f = view(T2,m,n,:,f)
+    T2_1m4e = view(T2,m,:,:,e)
+    T2_2m4e = view(T2,:,m,:,e)
+    T2_1m4f = view(T2,m,:,:,f)
+    T2_4f = view(T2,:,:,:,f)
+    T2_1m2n = view(T2,m,n,:,:)
+    T2_1m = view(T2,m,:,:,:)
+    T2_2n = view(T2,:,n,:,:)
+
+    T3_3n6f = get_casT3(n, f, Ccas, dets, dets[1], fcn, ndocc, T1, T2)
+    T3_3m6e = get_casT3(m, e, Ccas, dets, dets[1], fcn, ndocc, T1, T2)
+
+    T3_2m3n5e6f = T3_3n6f[:,m,:,e]
+    T3_3n5e6f = T3_3n6f[:,:,:,e]
+    T3_2m3n6f = T3_3n6f[:,m,:,:]
+    T3_2n3m6e = T3_3m6e[:,n,:,:]
+    T3_2n3m5f6e = T3_3m6e[:,n,:,f]
+    T3_3m5f6e = T3_3m6e[:,:,:,f]
+
+    @tensoropt begin
+        T4[i,j,a,b] -= pT1*T1[j,b]*T1[i,a]
+        T4[i,j,a,b] -= T1[j,b]*T1[i,a]*T2_1m2n3e4f
+        T4[i,j,a,b] += T1_1n[b]*T1[i,a]*T1_1m2e*T1_2f[j]
+        T4[i,j,a,b] += T1_1n[b]*T1[i,a]*T2_1m3e4f[j]
+        T4[i,j,a,b] += T1_1m2e*T1[i,a]*T2_1n4f[j,b]
+        T4[i,j,a,b] -= T1_1m2e*T1[i,a]*T2_2n4f[j,b]
+        T4[i,j,a,b] += T1_2f[j]*T1[i,a]*T2_1m2n3e[b]
+        T4[i,j,a,b] -= T1_1n2f*T1[i,a]*T2_1m3e[j,b]
+        T4[i,j,a,b] -= T1[i,a]*T3_2m3n5e6f[j,b]
+        T4[i,j,a,b] += T1[j,b]*T1_1m[a]*T1_2e[i]*T1_1n2f
+        T4[i,j,a,b] += T1[j,b]*T1_1m[a]*T2_2n3e4f[i]
+        T4[i,j,a,b] -= T1_1n[b]*T1_1m[a]*T1_2e[i]*T1_2f[j]
+        T4[i,j,a,b] -= T1_1n[b]*T1_1m[a]*T2_3e4f[i,j]
+        T4[i,j,a,b] -= T1_2e[i]*T1_1m[a]*T2_1n4f[j,b]
+        T4[i,j,a,b] += T1_2e[i]*T1_1m[a]*T2_2n4f[j,b]
+        T4[i,j,a,b] -= T1_2f[j]*T1_1m[a]*T2_2n3e[i,b]
+        T4[i,j,a,b] += T1_1n2f*T1_1m[a]*T2_3e[i,j,b]
+        T4[i,j,a,b] += T1_1m[a]*T3_3n5e6f[j,i,b]
+        T4[i,j,a,b] += T1_2e[i]*T1[j,b]*T2_1m2n4f[a]
+        T4[i,j,a,b] -= T1_1m2e*T1[j,b]*T2_2n4f[i,a]
+        T4[i,j,a,b] += T1_1n2f*T1[j,b]*T2_1m4e[i,a]
+        T4[i,j,a,b] -= T1_1n2f*T1[j,b]*T2_2m4e[i,a]
+        T4[i,j,a,b] -= T1[j,b]*T3_2n3m5f6e[i,a]
+        T4[i,j,a,b] -= T1_2e[i]*T1_1n[b]*T2_1m4f[j,a]
+        T4[i,j,a,b] += T1_1m2e*T1_1n[b]*T2_4f[i,j,a]
+        T4[i,j,a,b] -= T1_2f[j]*T1_1n[b]*T2_1m4e[i,a]
+        T4[i,j,a,b] += T1_2f[j]*T1_1n[b]*T2_2m4e[i,a]
+        T4[i,j,a,b] += T1_1n[b]*T3_3m5f6e[i,j,a]
+        T4[i,j,a,b] -= T1_2f[j]*T1_2e[i]*T2_1m2n[a,b]
+        T4[i,j,a,b] += T1_1n2f*T2_1m[j,a,b]*T1_2e[i]
+        T4[i,j,a,b] += T1_2e[i]*T3_2m3n6f[j,b,a]
+        T4[i,j,a,b] += T1_2f[j]*T1_1m2e*T2_2n[i,a,b] - pT1*T2[i,j,a,b]
+        T4[i,j,a,b] -= T1_1m2e*T3_3n6f[j,i,b,a]
+        T4[i,j,a,b] += T1_2f[j]*T3_2n3m6e[i,a,b] - T1_1n2f*T3_3m6e[i,j,a,b] - T2_1m2n3e4f*T2[i,j,a,b]
+        T4[i,j,a,b] += T2_1m3e4f[j]*T2_2n[i,a,b]
+        T4[i,j,a,b] += T2_2n3e4f[i]*T2_1m[j,a,b]
+        T4[i,j,a,b] -= T2_3e4f[i,j]*T2_1m2n[a,b]
+        T4[i,j,a,b] -= T2_1n4f[j,b]*T2_1m4e[i,a]
+        T4[i,j,a,b] += T2_1n4f[j,b]*T2_2m4e[i,a]
+        T4[i,j,a,b] += T2_2n4f[j,b]*T2_1m4e[i,a]
+        T4[i,j,a,b] -= T2_2n4f[j,b]*T2_2m4e[i,a]
+        T4[i,j,a,b] += T2_1m2n3e[b]*T2_4f[i,j,a]
+        T4[i,j,a,b] -= T2_1m3e[j,b]*T2_2n4f[i,a]
+        T4[i,j,a,b] -= T2_2n3e[i,b]*T2_1m4f[j,a]
+        T4[i,j,a,b] += T2_3e[i,j,b]*T2_1m2n4f[a]
+    end
+    
+    return T4
+end
+
+function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ndocc::Int, nvir::Int, frozen::Int, active::Int, f::Tuple, V::Tuple, fcn::Int)
+
+    Voooo, Vooov, Voovv, Vovov, Vovvv, Vvvvv = V
+    fock_OO, fock_OV, fock_VV = f
+
+    # Get T1 and T2
+    T1, T2  = get_casT1_casT2(Ccas, dets, dets[1], fcn, ndocc, nvir)
+
+    # Initialize arrays
+    ecT1 = zeros(size(fock_OV))
+    ecT2 = zeros(size(Voovv))
+
+    # Build T1 and T2 from CAS
+    ref = dets[1]
 
     # Create a list of active occupied and active virtual
     actocc = []
@@ -279,6 +514,8 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
     end
 
     # Cluster decomposition of T4
+    saveT4 = similar(T4)
+    saveT4 .= T4
     @tensoropt begin
         T4[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[i,a]*T1[k,c]*T1[l,d]
         T4[i,j,k,l,a,b,c,d] -= T1[j,b]*T1[i,a]*T2[k,l,c,d]
@@ -302,7 +539,7 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
         T4[i,j,k,l,a,b,c,d] -= T1[k,c]*T1[j,b]*T2[i,l,a,d]
         T4[i,j,k,l,a,b,c,d] += T1[l,d]*T1[j,b]*T2[k,i,a,c]
         T4[i,j,k,l,a,b,c,d] -= T1[l,d]*T1[j,b]*T2[i,k,a,c]
-        T4[i,j,k,l,a,b,c,d] -= T1[j,b]*T3[i,l,k,a,d,c]
+        T4[i,j,k,l,a,b,c,d] -= T1[j,b]*T3[i,l,k,a,d,c]   #problem
         T4[i,j,k,l,a,b,c,d] -= T1[i,c]*T1[l,b]*T2[k,j,a,d]
         T4[i,j,k,l,a,b,c,d] += T1[k,c]*T1[l,b]*T2[i,j,a,d]
         T4[i,j,k,l,a,b,c,d] -= T1[j,d]*T1[l,b]*T2[k,i,a,c]
@@ -334,7 +571,8 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
     # Compute ecT1
     for n in (actocc .- fcn)
         for f in (actvir .- ndocc)
-            T3_3n6f = view(T3, :, :, n, :, :, f)
+
+            # Arrays for ecT1 and ecT2
             Voovv_1n4f = view(Voovv, n, :, :, f)
             Voovv_2n4f = view(Voovv, :, n, :, f)
             Voovv_1n3f = view(Voovv, n, :, f, :)
@@ -344,6 +582,8 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
             Vooov_1n4f = view(Vooov, n, :, :, f)
             Vooov_2n4f = view(Vooov, :, n, :, f)
             fock_OV_1n2f = fock_OV[n,f]
+
+            T3_3n6f = get_casT3(n, f, Ccas, dets, dets[1], fcn, ndocc, T1, T2)
 
             @tensoropt begin
 
@@ -356,7 +596,7 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
                 ecT1[i,a] += 0.25*T3_3n6f[m,i,a,e]*Voovv_1n4f[m,e]
 
                 # Compute ecT2
-                ecT2[i,j,a,b] += fock_OV_1n2f*T3_3n6f[j,i,b,a]   # Maybe those two are the same?
+                ecT2[i,j,a,b] += fock_OV_1n2f*T3_3n6f[j,i,b,a]
                 ecT2[i,j,a,b] += fock_OV_1n2f*T3_3n6f[i,j,a,b]
                 ecT2[i,j,a,b] += -0.5*T3_3n6f[i,j,e,b]*Vovvv_1n4f[a,e]
                 ecT2[i,j,a,b] += 0.5*T3_3n6f[i,j,e,b]*Vovvv_1n3f[a,e]
@@ -391,7 +631,9 @@ function cas_decomposition(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, n
             for m in (actocc .- fcn)
                 for e in (actvir .- ndocc)
 
-                    T4_3m4n7e8f = view(T4, :, :, m, n, :, :, e, f)
+
+                    T4_3m4n7e8f = get_casT4(m,n,e,f, Ccas, dets, dets[1], fcn, ndocc, T1, T2)
+
                     T4aa_3m4n7e8f = view(T4aa, :, :, m, n, :, :, e, f)
                     Voovv_1m2n3e4f = Voovv[m,n,e,f]
                     Voovv_1n2m3e4f = Voovv[n,m,e,f]
