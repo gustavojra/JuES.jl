@@ -55,10 +55,7 @@ function get_cas_data(wfn::Wfn; kwargs...)
     return ref, Ccas_ex1or2, dets_ex1or2, Ccas_ex3, dets_ex3, Ccas_ex4, dets_ex4
 end
 
-function get_casT1_casT2(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref::Determinant, fcn::Int, ndocc::Int, nvir::Int)
-
-    T1 = zeros(ndocc-fcn, nvir)
-    T2 = zeros(ndocc-fcn, ndocc-fcn, nvir, nvir)
+function get_casT1_casT2!(T1::Array{Float64,2}, T2::Array{Float64,4}, Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref::Determinant, frozen::Int, ndocc::Int)
 
     for id in eachindex(dets)
 
@@ -70,7 +67,7 @@ function get_casT1_casT2(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref
 
             if βexc == 0
 
-                i, = αexclusive(ref, D) .- fcn
+                i, = αexclusive(ref, D) .- frozen
                 a, = αexclusive(D, ref) .- ndocc
 
                 p = phase(ref, D)
@@ -79,8 +76,8 @@ function get_casT1_casT2(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref
 
             elseif βexc == 1
 
-                i, = αexclusive(ref, D) .- fcn
-                j, = βexclusive(ref, D) .- fcn
+                i, = αexclusive(ref, D) .- frozen
+                j, = βexclusive(ref, D) .- frozen
                 a, = αexclusive(D, ref) .- ndocc
                 b, = βexclusive(D, ref) .- ndocc
 
@@ -96,11 +93,9 @@ function get_casT1_casT2(Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref
     end
 
     @tensor T2[i,j,a,b] -= T1[i,a]*T1[j,b] 
-
-    return T1, T2
 end
 
-function get_casT3!(T3::Array{Float64,4}, n::Int, f::Int, Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref::Determinant, fcn::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4})
+function get_casT3!(T3::Array{Float64,4}, n::Int, f::Int, Ccas::Array{Float64,1}, dets::Array{Determinant,1}, ref::Determinant, frozen::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4})
 
     # Clean up array
     fill!(T3, 0.0)
@@ -114,8 +109,8 @@ function get_casT3!(T3::Array{Float64,4}, n::Int, f::Int, Ccas::Array{Float64,1}
         if αexc == 2 && βexc == 1
 
             # i > k, a > c
-            k,i = αexclusive(ref, D) .- fcn
-            j,  = βexclusive(ref, D) .- fcn
+            k,i = αexclusive(ref, D) .- frozen
+            j,  = βexclusive(ref, D) .- frozen
 
             if !(n in [k,i])
                 continue
@@ -134,11 +129,11 @@ function get_casT3!(T3::Array{Float64,4}, n::Int, f::Int, Ccas::Array{Float64,1}
             p = 1
             _det = Determinant(ref.α, ref.β)
 
-            _p, _det = annihilate(_det, o1+fcn, 'α')
+            _p, _det = annihilate(_det, o1+frozen, 'α')
             p = _p*p
-            _p, _det = annihilate(_det, j+fcn,  'β')
+            _p, _det = annihilate(_det, j+frozen,  'β')
             p = _p*p
-            _p, _det = annihilate(_det, n+fcn,  'α')
+            _p, _det = annihilate(_det, n+frozen,  'α')
             p = _p*p
 
             _p, _det = create(_det, f+ndocc,  'α')
@@ -150,8 +145,6 @@ function get_casT3!(T3::Array{Float64,4}, n::Int, f::Int, Ccas::Array{Float64,1}
 
             T3[o1,j,o3,b] = p*Ccas[id]
 
-        elseif (αexc + βexc) > 3
-            break
         end
     end
 
@@ -178,7 +171,7 @@ function get_casT3!(T3::Array{Float64,4}, n::Int, f::Int, Ccas::Array{Float64,1}
 end
 
 function get_casT4αβ!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Ccas_ex4::Array{Float64,1}, dets_ex4::Array{Determinant,1}, Ccas_ex3::Array{Float64,1}, dets_ex3::Array{Determinant,1}, 
-                   ref::Determinant, fcn::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4}, T3_3n6f::Array{Float64,4}, T3_3m6e::Array{Float64,4})
+                   ref::Determinant, frozen::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4}, T3_3n6f::Array{Float64,4}, T3_3m6e::Array{Float64,4})
     # Clean up array
     fill!(T4, 0.0)
 
@@ -190,13 +183,13 @@ function get_casT4αβ!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Cc
         if αexc == 2 && βexc == 2
 
             # i > k, j > l, a > c, b > d
-            k,i = αexclusive(ref, D) .- fcn
+            k,i = αexclusive(ref, D) .- frozen
 
             if !(m in [i,k])
                 continue
             end
 
-            l,j = βexclusive(ref, D) .- fcn
+            l,j = βexclusive(ref, D) .- frozen
 
             if !(n in [l,j])
                 continue
@@ -222,13 +215,13 @@ function get_casT4αβ!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Cc
             p = 1
             _det = Determinant(ref.α, ref.β)
 
-            _p, _det = annihilate(_det, o1+fcn, 'α')
+            _p, _det = annihilate(_det, o1+frozen, 'α')
             p = _p*p
-            _p, _det = annihilate(_det, o2+fcn, 'β')
+            _p, _det = annihilate(_det, o2+frozen, 'β')
             p = _p*p
-            _p, _det = annihilate(_det, m+fcn,  'α')
+            _p, _det = annihilate(_det, m+frozen,  'α')
             p = _p*p
-            _p, _det = annihilate(_det, n+fcn,  'β')
+            _p, _det = annihilate(_det, n+frozen,  'β')
             p = _p*p
 
             _p, _det = create(_det, f+ndocc,  'β')
@@ -241,9 +234,6 @@ function get_casT4αβ!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Cc
             p = _p*p
 
             T4[o1,o2,o3,o4] =  p*Ccas_ex4[id]
-
-        elseif (αexc + βexc) > 4
-            break
         end
     end                 
 
@@ -331,7 +321,7 @@ function get_casT4αβ!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Cc
 end
 
 function get_casT4αα!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Ccas_ex4::Array{Float64,1}, dets_ex4::Array{Determinant,1}, Ccas_ex3::Array{Float64,1}, dets_ex3::Array{Determinant,1}, 
-                    ref::Determinant, fcn::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4}, T3_3n6f::Array{Float64,4}, T3_3m6f::Array{Float64,4}, T3_3n6e::Array{Float64,4}, T3_3m6e::Array{Float64,4})
+                    ref::Determinant, frozen::Int, ndocc::Int, T1::Array{Float64,2}, T2::Array{Float64,4}, T3_3n6f::Array{Float64,4}, T3_3m6f::Array{Float64,4}, T3_3n6e::Array{Float64,4}, T3_3m6e::Array{Float64,4})
     
     fill!(T4, 0.0)
 
@@ -348,13 +338,13 @@ function get_casT4αα!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Cc
         if αexc == 3 && βexc == 1
 
             # i > k > l, a > c > d
-            l,k,i = αexclusive(ref, D) .- fcn
+            l,k,i = αexclusive(ref, D) .- frozen
 
             if !(m in [k,l,i]) || !(n in [k,l,i])
                 continue
             end
 
-            j, = βexclusive(ref, D) .- fcn
+            j, = βexclusive(ref, D) .- frozen
             d,c,a = αexclusive(D,ref) .- ndocc
 
             if !(e in [d,c,a]) || !(f in [d,c,a])
@@ -369,13 +359,13 @@ function get_casT4αα!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Cc
             p = 1
             _det = Determinant(ref.α, ref.β)
 
-            _p, _det = annihilate(_det, o1+fcn, 'α')
+            _p, _det = annihilate(_det, o1+frozen, 'α')
             p = _p*p
-            _p, _det = annihilate(_det, j+fcn,  'β')
+            _p, _det = annihilate(_det, j+frozen,  'β')
             p = _p*p
-            _p, _det = annihilate(_det, m+fcn,  'α')
+            _p, _det = annihilate(_det, m+frozen,  'α')
             p = _p*p
-            _p, _det = annihilate(_det, n+fcn,  'α')
+            _p, _det = annihilate(_det, n+frozen,  'α')
             p = _p*p
 
             _p, _det = create(_det, f+ndocc,  'α')
@@ -517,7 +507,7 @@ function get_casT4αα!(T4::Array{Float64,4}, m::Int, n::Int, e::Int, f::Int, Cc
     end
 end
 
-function get_ec_from_T3!(n::Int, f::Int, ecT1::Array{Float64,2}, ecT2::Array{Float64,4}, T1::Array{Float64,2}, T3::Array{Float64,4}, fock_OV::Array{Float64, 2}, Voovv::Array{Float64, 4}, Vovvv::Array{Float64, 4}, Vooov::Array{Float64, 4})
+function get_ec_from_T3!(n::Int, f::Int, ecT1::Array{Float64,2}, ecT2::Array{Float64,4}, T1::Array{Float64,2}, T3::Array{Float64,4}, fov::Array{Float64, 2}, Voovv::Array{Float64, 4}, Vovvv::Array{Float64, 4}, Vooov::Array{Float64, 4})
 
     # Arrays for ecT1 and ecT2
     Voovv_1n4f = view(Voovv, n, :, :, f)
@@ -525,10 +515,9 @@ function get_ec_from_T3!(n::Int, f::Int, ecT1::Array{Float64,2}, ecT2::Array{Flo
     Voovv_1n3f = view(Voovv, n, :, f, :)
     Vovvv_1n4f = view(Vovvv, n, :, :, f)
     Vovvv_1n3f = view(Vovvv, n, :, f, :)
-    Vooov_1n3f = view(Vooov, n, :, f, :)
     Vooov_1n4f = view(Vooov, n, :, :, f)
     Vooov_2n4f = view(Vooov, :, n, :, f)
-    fock_OV_1n2f = fock_OV[n,f]
+    fov_1n2f = fov[n,f]
     
     @tensoropt begin
     
@@ -541,8 +530,8 @@ function get_ec_from_T3!(n::Int, f::Int, ecT1::Array{Float64,2}, ecT2::Array{Flo
         ecT1[i,a] += 0.25*T3[m,i,a,e]*Voovv_1n4f[m,e]
     
         # Compute ecT2
-        ecT2[i,j,a,b] += fock_OV_1n2f*T3[j,i,b,a]
-        ecT2[i,j,a,b] += fock_OV_1n2f*T3[i,j,a,b]
+        ecT2[i,j,a,b] += fov_1n2f*T3[j,i,b,a]
+        ecT2[i,j,a,b] += fov_1n2f*T3[i,j,a,b]
         ecT2[i,j,a,b] += -0.5*T3[i,j,e,b]*Vovvv_1n4f[a,e]
         ecT2[i,j,a,b] += 0.5*T3[i,j,e,b]*Vovvv_1n3f[a,e]
         ecT2[i,j,a,b] += T3[j,i,b,e]*Vovvv_1n3f[a,e]
@@ -575,33 +564,31 @@ function get_ec_from_T3!(n::Int, f::Int, ecT1::Array{Float64,2}, ecT2::Array{Flo
 
 end
 
-function cas_decomposition(Cas_data::Tuple, ndocc::Int, nvir::Int, frozen::Int, active::Int, f::Tuple, V::Tuple, fcn::Int)
+function cas_decomposition(Cas_data::Tuple, ndocc::Int, frozen::Int, actocc::Array{Int64,1}, actvir::Array{Int64,1},
+                           fov::Array{Float64,2}, Voovv::Array{Float64,4}, Vovvv::Array{Float64,4}, Vooov::Array{Float64,4})
 
     ref, Ccas_ex1or2, dets_ex1or2, Ccas_ex3, dets_ex3, Ccas_ex4, dets_ex4 = Cas_data
 
-    Voooo, Vooov, Voovv, Vovov, Vovvv, Vvvvv = V
-    fock_OO, fock_OV, fock_VV = f
-
     # Get T1 and T2
-    T1, T2  = get_casT1_casT2(Ccas_ex1or2, dets_ex1or2, ref, fcn, ndocc, nvir)
+    T1 = zeros(size(fov))
+    T2 = zeros(size(Voovv))
+    get_casT1_casT2!(T1, T2, Ccas_ex1or2, dets_ex1or2, ref, frozen, ndocc)
+
+    xfov = fov[:,1:4]
+    xVoovv = Voovv[:,:,1:4,1:4]
+    xVovvv = Vovvv[:,1:4,1:4,1:4]
+    xVooov = Vooov[:,:,:,1:4]
+
+    xT1 = zeros(size(xfov))
+    xT2 = zeros(size(xVoovv))
+    get_casT1_casT2!(xT1, xT2, Ccas_ex1or2, dets_ex1or2, ref, frozen, ndocc)
 
     # Initialize arrays
-    ecT1 = zeros(size(fock_OV))
+    ecT1 = zeros(size(fov))
     ecT2 = zeros(size(Voovv))
 
-    # Create a list of active occupied and active virtual
-    actocc = []
-    actvir = []
-
-    for no in 1:(ndocc+nvir)
-
-        if frozen < no ≤ ndocc
-            push!(actocc, no)
-
-        elseif ndocc < no ≤ (frozen+active)
-            push!(actvir, no)
-        end
-    end
+    xecT1 = zeros(size(xfov))
+    xecT2 = zeros(size(xVoovv))
 
     # Allocate arrays
     T3_3n6f = similar(T2)
@@ -610,24 +597,33 @@ function cas_decomposition(Cas_data::Tuple, ndocc::Int, nvir::Int, frozen::Int, 
     T3_3m6e = similar(T2)
     T4αβ = similar(T2)
     T4αα = similar(T2)
+
+    xT3_3n6f = similar(xT2)
+    xT3_3m6f = similar(xT2)
+    xT3_3n6e = similar(xT2)
+    xT3_3m6e = similar(xT2)
+    xT4αβ = similar(xT2)
+    xT4αα = similar(xT2)
     # Compute ecT1
-    for n in (actocc .- fcn)
-        for f in (actvir .- ndocc)
+    for n in actocc 
+        for f in actvir
 
-            get_casT3!(T3_3n6f, n, f, Ccas_ex3, dets_ex3, ref, fcn, ndocc, T1, T2)
-            get_ec_from_T3!(n, f, ecT1, ecT2, T1, T3_3n6f, fock_OV, Voovv, Vovvv, Vooov)
+            get_casT3!(T3_3n6f, n, f, Ccas_ex3, dets_ex3, ref, frozen, ndocc, T1, T2)
+            get_ec_from_T3!(n, f, ecT1, ecT2, T1, T3_3n6f, fov, Voovv, Vovvv, Vooov)
 
-            for m in (actocc .- fcn)
+            get_casT3!(xT3_3n6f, n, f, Ccas_ex3, dets_ex3, ref, frozen, ndocc, xT1, xT2)
 
-                get_casT3!(T3_3m6f, m, f, Ccas_ex3, dets_ex3, ref, fcn, ndocc, T1, T2)
+            for m in actocc 
 
-                for e in (actvir .- ndocc)
+                get_casT3!(T3_3m6f, m, f, Ccas_ex3, dets_ex3, ref, frozen, ndocc, T1, T2)
 
-                    get_casT3!(T3_3m6e, m, e, Ccas_ex3, dets_ex3, ref, fcn, ndocc, T1, T2)
-                    get_casT3!(T3_3n6e, n, e, Ccas_ex3, dets_ex3, ref, fcn, ndocc, T1, T2)
+                for e in actvir
 
-                    get_casT4αβ!(T4αβ, m,n,e,f, Ccas_ex4, dets_ex4, Ccas_ex3, dets_ex3, ref, fcn, ndocc, T1, T2, T3_3n6f, T3_3m6e)
-                    get_casT4αα!(T4αα, m,n,e,f, Ccas_ex4, dets_ex4, Ccas_ex3, dets_ex3, ref, fcn, ndocc, T1, T2, T3_3n6f, T3_3m6f, T3_3n6e, T3_3m6e)
+                    get_casT3!(T3_3m6e, m, e, Ccas_ex3, dets_ex3, ref, frozen, ndocc, T1, T2)
+                    get_casT3!(T3_3n6e, n, e, Ccas_ex3, dets_ex3, ref, frozen, ndocc, T1, T2)
+
+                    get_casT4αβ!(T4αβ, m,n,e,f, Ccas_ex4, dets_ex4, Ccas_ex3, dets_ex3, ref, frozen, ndocc, T1, T2, T3_3n6f, T3_3m6e)
+                    get_casT4αα!(T4αα, m,n,e,f, Ccas_ex4, dets_ex4, Ccas_ex3, dets_ex3, ref, frozen, ndocc, T1, T2, T3_3n6f, T3_3m6f, T3_3n6e, T3_3m6e)
 
                     ecT2 += T4αβ.*Voovv[m,n,e,f]
                     ecT2 += 0.25.*(T4αα + permutedims(T4αα, [2,1,4,3])).*(Voovv[m,n,e,f] - Voovv[n,m,e,f])
@@ -698,8 +694,12 @@ function do_ecrccsd(wfn::Wfn; kwargs...)
     D = [i + j - a - b for i = fock_Od, j = fock_Od, a = fock_Vd, b = fock_Vd]
 
     @output "Starting Cluster Decomposition...\n"
-    ao = (1+frozen-fcn):ndocc-fcn
+    #ao = (1+frozen-fcn):ndocc-fcn
+    #av = 1:(frozen+active-ndocc)
+    ao = 1:ndocc-fcn
     av = 1:nvir
+    @output "\nNumber of active occupied orbitals: {:d}\n" length(ao)
+    @output   "Number of active virtual orbitals:  {:d}\n" length(av)
     ecT1 = zeros(ndocc-fcn, nvir)
     ecT2 = zeros(ndocc-fcn, ndocc-fcn, nvir, nvir)
 
@@ -707,7 +707,8 @@ function do_ecrccsd(wfn::Wfn; kwargs...)
     newT1 = f[2]./d
     newT2 = V[3]./D
 
-    @time newT1[ao,av], newT2[ao,ao,av,av], ecT1[ao,av], ecT2[ao,ao,av,av] = cas_decomposition(Cas_data, ndocc, nvir, frozen, active, f, V, fcn)
+    @time newT1[ao,av], newT2[ao,ao,av,av], ecT1[ao,av], ecT2[ao,ao,av,av] = cas_decomposition(Cas_data, ndocc, frozen, collect(ao), [1,2,3,4],
+                                                                             f[2][ao,av], V[3][ao,ao,av,av], V[5][ao,av,av,av], V[2][ao,ao,ao,av])
 
     # Energy from CAS vector
     Ecc = update_energy(newT1, newT2, f[2], V[3])
